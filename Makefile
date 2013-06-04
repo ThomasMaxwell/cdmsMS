@@ -108,7 +108,7 @@ rules:
 
 # Clean
 clean:
-	@echo "Clean embedPython module..."
+	@echo "Clean cdms module..."
 	@rm -f $(MSOBJECT)
 
 
@@ -122,5 +122,5 @@ print_cflags:
 # Compilation targets
 #
 $(MSOBJECT): $(MSObjDir)/%.o: $(MSSrcDir)/%.c $(DEPEND)
-	@echo "Compile embedPython module `basename $@`..."
+	@echo "Compile cdms module `basename $@`..."
 	@$(CC) -c $(CFLAGS) -o $@ $<

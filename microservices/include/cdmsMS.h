@@ -19,6 +19,7 @@ int msiImportPythonZip(msParam_t *zip_path, ruleExecInfo_t *rei);
 int msiGetCDMSVariable( msParam_t *dataset_path, msParam_t *var_name, msParam_t *roi, msParam_t *result, ruleExecInfo_t *rei);
 int msiPythonInitialize(ruleExecInfo_t *rei);
 int msiPythonFinalize(ruleExecInfo_t *rei);
+int msiCDMSTest(msParam_t *test_string, ruleExecInfo_t *rei);
 
 
 #endif	/* CDMSMS */

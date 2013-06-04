@@ -18,6 +18,10 @@
 #define BIG_STR 2000
 rodsEnv env;
 
+int cdmsLog( char* msg ) {
+	rodsLog(LOG_NOTICE, "<-------------------------> CDMS Message <------------------------->\n     %s  ", msg );
+}
+
 //char* getFilename(char* path) {
 //	char str[strlen(path)];
 //	char *pch;
@@ -214,13 +218,18 @@ int msiGetCDMSVariable( msParam_t *dataset_path, msParam_t *var_name, msParam_t 
 	rsComm_t *rsComm = rei->rsComm;
 	bytesBuf_t inData;
 	int err_code = 0, status;
-	char str_script_path[BIG_STR];
+	char logBuffer[BIG_STR];
 
-	char* zone = env.rodsZone;
-	snprintf( str_script_path, BIG_STR, "/%s/home/public/Microservices/CDMS_DataServices.py", zone );
+//	char* zone = env.rodsZone;
+//	char str_script_path[BIG_STR];
+//	snprintf( str_script_path, BIG_STR, "/%s/home/public/Microservices/CDMS_DataServices.py", zone );
+
+	char* str_script_path = "/uvcdatZone/home/public/Microservices/CDMS_DataServices.py";
 	char *str_func_name = "getCDMSVariable";
 
 	// Read the script from iRODS, get a string
+	sprintf( logBuffer, " Reading script file: %s ", str_script_path );
+	cdmsLog( logBuffer );
 	status = readTextFile(rsComm, str_script_path, &inData);
 	if (status < 0) {
 		rodsLogAndErrorMsg(LOG_ERROR, &rsComm->rError, status,  "%s:  could not read file, status = %d", str_script_path, status);
@@ -284,6 +293,7 @@ int msiGetCDMSVariable( msParam_t *dataset_path, msParam_t *var_name, msParam_t 
 
 int msiPythonInitialize(ruleExecInfo_t *rei) {
 	// Initialize the python interpreter
+	cdmsLog( " Initializing' " );
 	if (!Py_IsInitialized()) {
 	    int status = getRodsEnv (&env);
 	    if (status < 0) {
@@ -297,6 +307,12 @@ int msiPythonInitialize(ruleExecInfo_t *rei) {
 	return 0;
 }
 
+int msiCDMSTest(msParam_t *test_string, ruleExecInfo_t *rei) {
+	char *str_test_string = parseMspForStr(test_string);
+	rodsLog( LOG_NOTICE, "<-------------------------> Testing msiCDMS: test string = '%s' <-------------------------> ", str_test_string) ;
+	return 0;
+}
+
 
 int msiPythonFinalize(ruleExecInfo_t *rei) {
 	// Undo all initializations made by Py_Initialize()
@@ -307,6 +323,7 @@ int msiPythonFinalize(ruleExecInfo_t *rei) {
 	// is cleaned.
 
 
+	cdmsLog( " Finalizing' " );
 	Py_Finalize();
 //	PyRun_SimpleString("import os");
 //	PyRun_SimpleString("for f in imported_zip_packages:os.remove(f)");

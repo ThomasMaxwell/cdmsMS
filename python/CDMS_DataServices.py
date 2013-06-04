@@ -6,7 +6,7 @@ def getSelector( roi ):
     return sel
 
 def getCDMSVariable( dataset_path, var_name, roi ): 
-    ds = cdsm.open( dataset_path )  
+    ds = cdms2.open( dataset_path )  
     var = ds( var_name )
     roi_selector = getSelector( roi )
     sub_var = var( roi_selector )
