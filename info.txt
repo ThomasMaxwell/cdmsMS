@@ -1,0 +1,7 @@
+Name:		cdms
+Brief:		Microservices for accessing CDMS from irods
+Description:	Microservices for accessing datasets with subsetting and other services using the Climate Data Management System. 
+Enabled:	yes
+Creator:	Thomas Maxwell, NASA NCCS, GSFC
+Created:	February 2009
+License:	GPL
