@@ -12,14 +12,17 @@
 #include <Python.h>
 #include "arrayobject.h"
 #include "ncGetVarsByType.h"
-
-//#include "PyMsParam.h"
+#include "dataObjOpr.h"
 
 #define BIG_STR 2000
-rodsEnv env;
 
-int cdmsLog( char* msg ) {
-	rodsLog(LOG_NOTICE, "<-------------------------> CDMS Message <------------------------->\n     %s  ", msg );
+void cdmsLog( char *formatStr, ... ) {
+	char bigString[BIG_STR];
+	va_list ap;
+	va_start(ap, formatStr);
+	vsnprintf(bigString, BIG_STR-1, formatStr, ap);
+	va_end(ap);
+	rodsLog(LOG_NOTICE, "<-------------------------> CDMS Message <------------------------->\n     %s  ", bigString );
 }
 
 //char* getFilename(char* path) {
@@ -208,37 +211,55 @@ int setDataArrayType( ncGetVarOut_t *ncGetVarOut, char kind ) {
 	return type;
 }
 
-int msiGetCDMSVariable( msParam_t *dataset_path, msParam_t *var_name, msParam_t *roi, msParam_t *result, ruleExecInfo_t *rei)
+int msiGetCDMSVariable( msParam_t *mspDatasetPath, msParam_t *mspVarName, msParam_t *mspRoi, msParam_t *mspResult, ruleExecInfo_t *rei)
 {
 	RE_TEST_MACRO( "    Calling msiGetCDMSVariable");
+	PyGILState_STATE gstate = PyGILState_Ensure();
 
-	char *str_dataset_path = parseMspForStr(dataset_path);
-	char *str_var_name = parseMspForStr(var_name);
-	char *str_roi = parseMspForStr(roi);
+	char *strFunctionName = "getCDMSVariable";
+	char *strScriptName = "CDMS_DataServices.py";
+
+	char *strVarName = parseMspForStr(mspVarName);
+	char *strRoi = parseMspForStr(mspRoi);
 	rsComm_t *rsComm = rei->rsComm;
 	bytesBuf_t inData;
 	int err_code = 0, status;
-	char logBuffer[BIG_STR];
 
-//	char* zone = env.rodsZone;
-//	char str_script_path[BIG_STR];
-//	snprintf( str_script_path, BIG_STR, "/%s/home/public/Microservices/CDMS_DataServices.py", zone );
-
-	char* str_script_path = "/uvcdatZone/home/public/Microservices/CDMS_DataServices.py";
-	char *str_func_name = "getCDMSVariable";
+	rodsEnv env;
+    status = getRodsEnv (&env);
+    if (status < 0) {
+        rodsLogError (LOG_ERROR, status, "main: getRodsEnv error. ");
+        return status;
+    }
+	char* strZone = env.rodsZone;
+	char* strRodsHome = env.rodsHome;
+	char* strRodsEnvFile = getRodsEnvFileName();
+	char strScriptPath[BIG_STR];
+	snprintf( strScriptPath, BIG_STR, "/%s/home/public/Microservices/%s", strZone, strScriptName );
+    dataObjInp_t dataObjInp, *myDataObjInp;
+    if ((rei->status = parseMspForDataObjInp ( mspDatasetPath, &dataObjInp, &myDataObjInp, 0)) < 0) {
+        rodsLogAndErrorMsg (LOG_ERROR, &rsComm->rError, rei->status, "msiGetCDMSVariable: input mspDatasetPath error. status = %d", rei->status);
+        return (rei->status);
+    }
+	dataObjInfo_t *dsetPathObjInfo = NULL;
+	status = getDataObjInfo (rsComm, myDataObjInp, &dsetPathObjInfo, NULL, 1);
+    if (status < 0) {
+        rodsLog ( LOG_ERROR, "msiGetCDMSVariable: getDataObjInfo for %s", myDataObjInp->objPath );
+        return (status);
+    }
+	char *strDatasetPhysicalPath = dsetPathObjInfo->filePath;
 
 	// Read the script from iRODS, get a string
-	sprintf( logBuffer, " Reading script file: %s ", str_script_path );
-	cdmsLog( logBuffer );
-	status = readTextFile(rsComm, str_script_path, &inData);
+	status = readTextFile(rsComm, strScriptPath, &inData);
 	if (status < 0) {
-		rodsLogAndErrorMsg(LOG_ERROR, &rsComm->rError, status,  "%s:  could not read file, status = %d", str_script_path, status);
+		rodsLogAndErrorMsg(LOG_ERROR, &rsComm->rError, status,  "%s:  could not read file, status = %d", strScriptPath, status);
 		return USER_FILE_DOES_NOT_EXIST;
 	}
 
 	// Execute the script (It will load the functions defined in the script in the global dictionary)
-	char tmpStr[inData.len];
+	char tmpStr[inData.len+1];
 	snprintf(tmpStr, inData.len, "%s", (char *)inData.buf);
+	cdmsLog( " Execute script: \n %s \n\n *rodsEnvFile = %s \n", tmpStr, strRodsEnvFile );
 	err_code = PyRun_SimpleString(tmpStr);
 	if (err_code == -1) {
 		PyErr_Print();
@@ -250,7 +271,7 @@ int msiGetCDMSVariable( msParam_t *dataset_path, msParam_t *var_name, msParam_t 
 	PyObject *pModule = PyImport_AddModule("__main__");
 	PyObject *pDict = PyModule_GetDict(pModule);
 	// Get a reference to the function we want to call
-	PyObject *pFunc = PyDict_GetItemString(pDict, str_func_name);
+	PyObject *pFunc = PyDict_GetItemString(pDict, strFunctionName);
 	if (!pFunc) {
 		PyErr_Print();
 		err_code = NO_MICROSERVICE_FOUND_ERR;
@@ -258,48 +279,49 @@ int msiGetCDMSVariable( msParam_t *dataset_path, msParam_t *var_name, msParam_t 
 		return err_code;
 	}
 	// Call the python microservice with the parameters
-	PyArrayObject *arr = (PyArrayObject*) PyObject_CallFunction(pFunc, "sss", str_dataset_path, str_var_name, str_roi );
-
-	if ( arr == NULL ) {
-		// if CallFunction fails rv is NULL. This is an error in the
-		// python script (wrong name, syntax error, ...
-		// The PyErr_Print will print it in rodsLog
-		PyErr_Print();
-		err_code = INVALID_OBJECT_TYPE; // not the best one but it exists
-	}
-
-	void *raw_data = PyArray_DATA( arr );
-	npy_intp *dims = PyArray_DIMS( arr );
-	npy_intp len = PyArray_SIZE( arr );
-	int ndim = PyArray_NDIM( arr );
-	PyArray_Descr *desc = PyArray_DESCR( arr );
-	npy_intp *strides = PyArray_STRIDES( arr );
-
-	ncGetVarOut_t *ncGetVarOut = (ncGetVarOut_t *) calloc (1, sizeof (ncGetVarOut_t));
-    ncGetVarOut->dataArray = (dataArray_t *) calloc (1, sizeof (dataArray_t));
-    ncGetVarOut->dataArray->len = len;
-    int dtype = setDataArrayType( ncGetVarOut, desc->kind );
-    if( dtype == NETCDF_INVALID_DATA_TYPE ) { err_code = INVALID_OBJECT_TYPE; }
-    ncGetVarOut->dataArray->buf = raw_data;
-
-    rei->status = err_code;
-    if (rei->status >= 0) {
-    	fillMsParam ( result, NULL, NcGetVarOut_MS_T, &ncGetVarOut, NULL );
-    } else {
-    	rodsLogAndErrorMsg( LOG_ERROR, &rsComm->rError, rei->status, "msiGetCDMSVariable failed, status = %d", rei->status );
-    }
+	cdmsLog( " Call function %s( '%s', '%s', '%s' ) ", strFunctionName, strDatasetPhysicalPath, strVarName, strRoi );
+	PyObject* pystrDatasetPhysicalPath = PyString_FromString( strDatasetPhysicalPath );
+	PyObject* pystrVarName = PyString_FromString( strVarName );
+	PyObject* pystrRoi = PyString_FromString( strRoi );
+	PyObject *arr = (PyObject*) PyObject_CallFunctionObjArgs( pFunc, pystrDatasetPhysicalPath, pystrVarName, pystrRoi );
+//	PyArrayObject *arr = (PyArrayObject*) PyObject_CallFunctionObjArgs( pFunc, pystrDatasetPhysicalPath, pystrVarName, pystrRoi );
+	cdmsLog( " Completed function call. " );
+//	if ( arr == NULL ) {
+//		// if CallFunction fails rv is NULL. This is an error in the
+//		// python script (wrong name, syntax error, ...
+//		// The PyErr_Print will print it in rodsLog
+//		PyErr_Print();
+//		err_code = INVALID_OBJECT_TYPE; // not the best one but it exists
+//		return err_code;
+//	}
+//
+//	void *raw_data = PyArray_DATA( arr );
+//	npy_intp *dims = PyArray_DIMS( arr );
+//	npy_intp len = PyArray_SIZE( arr );
+//	int ndim = PyArray_NDIM( arr );
+//	PyArray_Descr *desc = PyArray_DESCR( arr );
+//	npy_intp *strides = PyArray_STRIDES( arr );
+//
+//	ncGetVarOut_t *ncGetVarOut = (ncGetVarOut_t *) calloc (1, sizeof (ncGetVarOut_t));
+//    ncGetVarOut->dataArray = (dataArray_t *) calloc (1, sizeof (dataArray_t));
+//    ncGetVarOut->dataArray->len = len;
+//    int dtype = setDataArrayType( ncGetVarOut, desc->kind );
+//    if( dtype == NETCDF_INVALID_DATA_TYPE ) { err_code = INVALID_OBJECT_TYPE; }
+//    ncGetVarOut->dataArray->buf = raw_data;
+//
+//    rei->status = err_code;
+//    if (rei->status >= 0) {
+//    	fillMsParam ( mspResult, NULL, NcGetVarOut_MS_T, &ncGetVarOut, NULL );
+//    } else {
+//    	rodsLogAndErrorMsg( LOG_ERROR, &rsComm->rError, rei->status, "msiGetCDMSVariable failed, status = %d", rei->status );
+//    }
+	freeAllDataObjInfo (dsetPathObjInfo);
     return (rei->status);
 }
 
 int msiPythonInitialize(ruleExecInfo_t *rei) {
 	// Initialize the python interpreter
-	cdmsLog( " Initializing' " );
 	if (!Py_IsInitialized()) {
-	    int status = getRodsEnv (&env);
-	    if (status < 0) {
-	        rodsLogError (LOG_ERROR, status, "main: getRodsEnv error. ");
-	        return -1;
-	    }
 	    Py_Initialize();
 //		PyRun_SimpleString("call_history = {}");
 //		PyRun_SimpleString("imported_zip_packages = []");
@@ -309,7 +331,7 @@ int msiPythonInitialize(ruleExecInfo_t *rei) {
 
 int msiCDMSTest(msParam_t *test_string, ruleExecInfo_t *rei) {
 	char *str_test_string = parseMspForStr(test_string);
-	rodsLog( LOG_NOTICE, "<-------------------------> Testing msiCDMS: test string = '%s' <-------------------------> ", str_test_string) ;
+	rodsLog( LOG_NOTICE, "<-------------------------> Testing msiCDMS[1]: test string = '%s' <-------------------------> ", str_test_string) ;
 	return 0;
 }
 
@@ -322,8 +344,6 @@ int msiPythonFinalize(ruleExecInfo_t *rei) {
 	// Without finalize, I hope that when the thread is disposed of, the memory
 	// is cleaned.
 
-
-	cdmsLog( " Finalizing' " );
 	Py_Finalize();
 //	PyRun_SimpleString("import os");
 //	PyRun_SimpleString("for f in imported_zip_packages:os.remove(f)");

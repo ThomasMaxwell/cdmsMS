@@ -110,6 +110,8 @@ rules:
 clean:
 	@echo "Clean cdms module..."
 	@rm -f $(MSOBJECT)
+	@rm -f ../../lib/core/obj/libRodsAPIs.a
+	@rm -f ../../server/core/obj/srvRodsAPIs.a
 
 
 # Show compile flags
