@@ -1,15 +1,11 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <time.h>
-#include <assert.h>
-#include <cstdlib>
-#include <iostream>
-#include <unistd.h>
+#include "Python.h"
+//#include <time.h>
+//#include <cstdlib>
+//#include <iostream>
+//#include <unistd.h>
 
 #include "rods.h"
 #include "cdmsMS.h"
-#include <Python.h>
 #include "arrayobject.h"
 #include "ncGetVarsByType.h"
 #include "dataObjOpr.h"
@@ -25,162 +21,213 @@ void cdmsLog( char *formatStr, ... ) {
 	rodsLog(LOG_NOTICE, "<-------------------------> CDMS Message <------------------------->\n     %s  ", bigString );
 }
 
-//char* getFilename(char* path) {
-//	char str[strlen(path)];
-//	char *pch;
-//	char *filename = (char*)malloc(sizeof(char)*strlen(path));
+char* getFilename(char* path) {
+	char str[strlen(path)];
+	char *pch;
+	char *filename = (char*)malloc(sizeof(char)*strlen(path));
+
+	strcpy(str, path);
+
+	pch = strtok (str,"/");
+	while (pch != NULL)
+	{
+		strcpy(filename, pch);
+		pch = strtok (NULL, "/");
+	}
+
+	return strtok (filename, ".");
+}
+
+char* getBasename(char* path) {
+	char str[strlen(path)];
+	char * pch;
+	char *basename = (char*)malloc(sizeof(char)*strlen(path));
+
+	strcpy(str, path);
+	strcpy(basename, "/");
+
+	pch = strtok (str,"/");
+	while (pch != NULL)
+	{
+		char elem[50];
+		strcpy(elem, pch);
+		pch = strtok (NULL, "/");
+		// For the last element
+		if (pch != NULL) {
+			strcat(basename, elem);
+			strcat(basename, "/");
+		}
+	}
+	return basename;
+}
+
+PyArrayObject* getVariable( char* dataset_path, char* var_name, char* roi )
+{
+    PyObject *pScript, *pModule, *pFunc, *pArgs;
+	char buffer[250];
+    int i, err_code;
+
+    char* script_path = "/Developer/Projects/iRODS/src-3.2/modules/cdms/python/CDMS_DataServices.py";
+    char* method_name = "getCDMSVariable";
+
+    Py_Initialize();
+	PyRun_SimpleString("import sys");
+	sprintf( buffer, "sys.path.insert(0, '%s')", getBasename(script_path) );
+	PyRun_SimpleString(buffer);
+
+	// Get the pointer of the function you want to call
+	pScript = PyString_FromString( getFilename(script_path) );
+	pModule = PyImport_Import(pScript);
+	Py_DECREF(pScript);
+    if (pModule != NULL) {
+        pFunc = PyObject_GetAttrString(pModule, method_name );
+        /* pFunc is a new reference */
+
+        if (pFunc && PyCallable_Check(pFunc)) {
+            pArgs = PyTuple_New( 3 );
+            PyTuple_SetItem( pArgs, 0, PyString_FromString( dataset_path ) );
+            PyTuple_SetItem( pArgs, 1, PyString_FromString( var_name ) );
+            PyTuple_SetItem( pArgs, 2, PyString_FromString( roi ) );
+            PyArrayObject *arr = (PyArrayObject*) PyObject_CallObject( pFunc, pArgs );
+            Py_DECREF(pArgs);
+            if (arr != NULL) {
+                return arr;
+            }
+            else {
+            	if( PyErr_Occurred() ) { PyErr_Print(); }
+                fprintf(stderr,"Call failed\n");
+            }
+        }
+        else {
+            if( PyErr_Occurred() ) { PyErr_Print(); }
+            fprintf(stderr, "Cannot find function \"%s\"\n", method_name );
+        }
+        Py_XDECREF(pFunc);
+        Py_DECREF(pModule);
+    }
+    else {
+        PyErr_Print();
+        fprintf(stderr, "Failed to load \"%s\"\n", script_path );
+    }
+    Py_Finalize();
+    return NULL;
+}
+
+//int readTextFile(rsComm_t *rsComm, char* inPath, bytesBuf_t *data)
+//{
+//	/* ********** *
+//	 * Initialize *
+//	 * ********** */
 //
-//	strcpy(str, path);
+//	dataObjInp_t openParam;
+//	openedDataObjInp_t closeParam;
+//	openedDataObjInp_t readParam;
+//	openedDataObjInp_t seekParam;
+//	fileLseekOut_t* seekResult = NULL;
+//	int fd = -1;
+//	int fileWasOpened = FALSE;
+//	int fileLength = 0;
+//	int status;
 //
-//	pch = strtok (str,"/");
-//	while (pch != NULL)
-//	{
-//		strcpy(filename, pch);
-//		pch = strtok (NULL, "/");
+//	memset(&openParam,  0, sizeof(dataObjInp_t));
+//	memset(&seekParam,  0, sizeof(openedDataObjInp_t));
+//	memset(&readParam,  0, sizeof(openedDataObjInp_t));
+//	memset(&closeParam, 0, sizeof(openedDataObjInp_t));
+//	memset(data,        0, sizeof(bytesBuf_t));
+//
+//
+//	/* ************* *
+//	 * Open the file *
+//	 * ************* */
+//
+//	// Set the parameters for the open call
+//	strcpy(openParam.objPath, inPath);
+//	openParam.openFlags = O_RDONLY;
+//
+//	status = rsDataObjOpen(rsComm, &openParam);
+//
+//	if (status < 0) { return status; }
+//	fd = status;
+//	fileWasOpened = TRUE;
+//
+//
+//	/* ************************ *
+//     * Looking for the filesize *
+//	 * ************************ */
+//
+//	// Go to the end of the file
+//	seekParam.l1descInx = fd;
+//	seekParam.offset  = 0;
+//	seekParam.whence  = SEEK_END;
+//
+//	status = rsDataObjLseek(rsComm, &seekParam, &seekResult);
+//
+//	if (status < 0) {
+//		// Try to close the file we opened, ignoring errors
+//		if (fileWasOpened) {
+//			closeParam.l1descInx = fd;
+//			rsDataObjClose(rsComm, &closeParam);
+//		}
+//		return status;
+//	}
+//	fileLength = seekResult->offset;
+//
+//	// Reset to the start for the read
+//	seekParam.offset  = 0;
+//	seekParam.whence  = SEEK_SET;
+//
+//	status = rsDataObjLseek(rsComm, &seekParam, &seekResult);
+//
+//	if (status < 0) {
+//		// Try to close the file we opened, ignoring errors
+//		if (fileWasOpened) {
+//			closeParam.l1descInx = fd;
+//			rsDataObjClose(rsComm, &closeParam);
+//		}
+//		return status;
 //	}
 //
-//	return strtok (filename, ".");
-//}
 //
-//char* getBasename(char* path) {
-//	char str[strlen(path)];
-//	char * pch;
-//	char *basename = (char*)malloc(sizeof(char)*strlen(path));
+//	/* ************* *
+//	 * Read the file *
+//	 * ************* */
 //
-//	strcpy(str, path);
-//	strcpy(basename, "/");
 //
-//	pch = strtok (str,"/");
-//	while (pch != NULL)
-//	{
-//		char elem[50];
-//		strcpy(elem, pch);
-//		pch = strtok (NULL, "/");
-//		// For the last element
-//		if (pch != NULL) {
-//			strcat(basename, elem);
-//			strcat(basename, "/");
+//	// Set the parameters for the open call
+//	readParam.l1descInx = fd;
+//	readParam.len       = fileLength;
+//	data->len           = fileLength;
+//	data->buf           = (void*)malloc(fileLength);
+//
+//	// Read the file
+//	status = rsDataObjRead(rsComm, &readParam, data);
+//	if (status < 0)	{
+//		free((char*)data->buf);
+//		// Try to close the file we opened, ignoring errors
+//		if (fileWasOpened) {
+//			closeParam.l1descInx = fd;
+//			rsDataObjClose(rsComm, &closeParam);
+//		}
+//		return status;
+//	}
+//
+//	/* ************** *
+//	 * Close the file *
+//	 * ************** */
+//
+//	// Close the file we opened
+//	if (fileWasOpened) {
+//		closeParam.l1descInx = fd;
+//
+//		status = rsDataObjClose(rsComm, &closeParam);
+//		if (status < 0) {
+//			free((char*)data->buf);
+//			return status;
 //		}
 //	}
-//	return basename;
+//
+//	return 0;
 //}
-
-
-int readTextFile(rsComm_t *rsComm, char* inPath, bytesBuf_t *data)
-{
-	/* ********** *
-	 * Initialize *
-	 * ********** */
-
-	dataObjInp_t openParam;
-	openedDataObjInp_t closeParam;
-	openedDataObjInp_t readParam;
-	openedDataObjInp_t seekParam;
-	fileLseekOut_t* seekResult = NULL;
-	int fd = -1;
-	int fileWasOpened = FALSE;
-	int fileLength = 0;
-	int status;
-
-	memset(&openParam,  0, sizeof(dataObjInp_t));
-	memset(&seekParam,  0, sizeof(openedDataObjInp_t));
-	memset(&readParam,  0, sizeof(openedDataObjInp_t));
-	memset(&closeParam, 0, sizeof(openedDataObjInp_t));
-	memset(data,        0, sizeof(bytesBuf_t));
-
-
-	/* ************* *
-	 * Open the file *
-	 * ************* */
-
-	// Set the parameters for the open call
-	strcpy(openParam.objPath, inPath);
-	openParam.openFlags = O_RDONLY;
-
-	status = rsDataObjOpen(rsComm, &openParam);
-
-	if (status < 0) { return status; }
-	fd = status;
-	fileWasOpened = TRUE;
-
-
-	/* ************************ *
-     * Looking for the filesize *
-	 * ************************ */
-
-	// Go to the end of the file
-	seekParam.l1descInx = fd;
-	seekParam.offset  = 0;
-	seekParam.whence  = SEEK_END;
-
-	status = rsDataObjLseek(rsComm, &seekParam, &seekResult);
-
-	if (status < 0) {
-		// Try to close the file we opened, ignoring errors
-		if (fileWasOpened) {
-			closeParam.l1descInx = fd;
-			rsDataObjClose(rsComm, &closeParam);
-		}
-		return status;
-	}
-	fileLength = seekResult->offset;
-
-	// Reset to the start for the read
-	seekParam.offset  = 0;
-	seekParam.whence  = SEEK_SET;
-
-	status = rsDataObjLseek(rsComm, &seekParam, &seekResult);
-
-	if (status < 0) {
-		// Try to close the file we opened, ignoring errors
-		if (fileWasOpened) {
-			closeParam.l1descInx = fd;
-			rsDataObjClose(rsComm, &closeParam);
-		}
-		return status;
-	}
-
-
-	/* ************* *
-	 * Read the file *
-	 * ************* */
-
-
-	// Set the parameters for the open call
-	readParam.l1descInx = fd;
-	readParam.len       = fileLength;
-	data->len           = fileLength;
-	data->buf           = (void*)malloc(fileLength);
-
-	// Read the file
-	status = rsDataObjRead(rsComm, &readParam, data);
-	if (status < 0)	{
-		free((char*)data->buf);
-		// Try to close the file we opened, ignoring errors
-		if (fileWasOpened) {
-			closeParam.l1descInx = fd;
-			rsDataObjClose(rsComm, &closeParam);
-		}
-		return status;
-	}
-
-	/* ************** *
-	 * Close the file *
-	 * ************** */
-
-	// Close the file we opened
-	if (fileWasOpened) {
-		closeParam.l1descInx = fd;
-
-		status = rsDataObjClose(rsComm, &closeParam);
-		if (status < 0) {
-			free((char*)data->buf);
-			return status;
-		}
-	}
-
-	return 0;
-}
 
 //	char desc.kind:  A ÔbÕ represents Boolean, a ÔiÕ represents signed integer, a ÔuÕ represents unsigned integer, ÔfÕ represents floating point,
 //  ÔcÕ represents complex floating point, ÔSÕ represents 8-bit character string, ÔUÕ represents 32-bit/character unicode string, and ÔVÕ repesents arbitrary.
@@ -214,10 +261,10 @@ int setDataArrayType( ncGetVarOut_t *ncGetVarOut, char kind ) {
 int msiGetCDMSVariable( msParam_t *mspDatasetPath, msParam_t *mspVarName, msParam_t *mspRoi, msParam_t *mspResult, ruleExecInfo_t *rei)
 {
 	RE_TEST_MACRO( "    Calling msiGetCDMSVariable");
-	PyGILState_STATE gstate = PyGILState_Ensure();
 
-	char *strFunctionName = "getCDMSVariable";
-	char *strScriptName = "CDMS_DataServices.py";
+//	PyGILState_STATE gstate = PyGILState_Ensure();
+//	char *strFunctionName = "getCDMSVariable";
+//	char *strScriptName = "CDMS_DataServices.py";
 
 	char *strVarName = parseMspForStr(mspVarName);
 	char *strRoi = parseMspForStr(mspRoi);
@@ -234,8 +281,8 @@ int msiGetCDMSVariable( msParam_t *mspDatasetPath, msParam_t *mspVarName, msPara
 	char* strZone = env.rodsZone;
 	char* strRodsHome = env.rodsHome;
 	char* strRodsEnvFile = getRodsEnvFileName();
-	char strScriptPath[BIG_STR];
-	snprintf( strScriptPath, BIG_STR, "/%s/home/public/Microservices/%s", strZone, strScriptName );
+//	char strScriptPath[BIG_STR];
+//	snprintf( strScriptPath, BIG_STR, "/%s/home/public/Microservices/%s", strZone, strScriptName );
     dataObjInp_t dataObjInp, *myDataObjInp;
     if ((rei->status = parseMspForDataObjInp ( mspDatasetPath, &dataObjInp, &myDataObjInp, 0)) < 0) {
         rodsLogAndErrorMsg (LOG_ERROR, &rsComm->rError, rei->status, "msiGetCDMSVariable: input mspDatasetPath error. status = %d", rei->status);
@@ -249,43 +296,52 @@ int msiGetCDMSVariable( msParam_t *mspDatasetPath, msParam_t *mspVarName, msPara
     }
 	char *strDatasetPhysicalPath = dsetPathObjInfo->filePath;
 
-	// Read the script from iRODS, get a string
-	status = readTextFile(rsComm, strScriptPath, &inData);
-	if (status < 0) {
-		rodsLogAndErrorMsg(LOG_ERROR, &rsComm->rError, status,  "%s:  could not read file, status = %d", strScriptPath, status);
-		return USER_FILE_DOES_NOT_EXIST;
-	}
-
-	// Execute the script (It will load the functions defined in the script in the global dictionary)
-	char tmpStr[inData.len+1];
-	snprintf(tmpStr, inData.len, "%s", (char *)inData.buf);
-	cdmsLog( " Execute script: \n %s \n\n *rodsEnvFile = %s \n", tmpStr, strRodsEnvFile );
-	err_code = PyRun_SimpleString(tmpStr);
-	if (err_code == -1) {
-		PyErr_Print();
-		err_code = INVALID_OBJECT_TYPE;
-		rei->status = err_code;
-		return err_code;
-	}
-	// Get a reference to the main module and global dictionary
-	PyObject *pModule = PyImport_AddModule("__main__");
-	PyObject *pDict = PyModule_GetDict(pModule);
-	// Get a reference to the function we want to call
-	PyObject *pFunc = PyDict_GetItemString(pDict, strFunctionName);
-	if (!pFunc) {
-		PyErr_Print();
-		err_code = NO_MICROSERVICE_FOUND_ERR;
-		rei->status = err_code;
-		return err_code;
-	}
+//	// Read the script from iRODS, get a string
+//	status = readTextFile(rsComm, strScriptPath, &inData);
+//	if (status < 0) {
+//		rodsLogAndErrorMsg(LOG_ERROR, &rsComm->rError, status,  "%s:  could not read file, status = %d", strScriptPath, status);
+//		return USER_FILE_DOES_NOT_EXIST;
+//	}
+//
+//	// Execute the script (It will load the functions defined in the script in the global dictionary)
+//	char tmpStr[inData.len+1];
+//	snprintf(tmpStr, inData.len, "%s", (char *)inData.buf);
+//	cdmsLog( " Execute script: \n %s \n\n *rodsEnvFile = %s \n", tmpStr, strRodsEnvFile );
+//	err_code = PyRun_SimpleString(tmpStr);
+//	if (err_code == -1) {
+//		PyErr_Print();
+//		err_code = INVALID_OBJECT_TYPE;
+//		rei->status = err_code;
+//		return err_code;
+//	}
+//	// Get a reference to the main module and global dictionary
+//	PyObject *pModule = PyImport_AddModule("__main__");
+//	PyObject *pDict = PyModule_GetDict(pModule);
+//	// Get a reference to the function we want to call
+//	PyObject *pFunc = PyDict_GetItemString(pDict, strFunctionName);
+//	if (!pFunc) {
+//		PyErr_Print();
+//		err_code = NO_MICROSERVICE_FOUND_ERR;
+//		rei->status = err_code;
+//		return err_code;
+//	}
+//	if (!PyCallable_Check(pFunc) ) {
+//		err_code = NO_MICROSERVICE_FOUND_ERR;
+//		rei->status = err_code;
+//		rodsLogAndErrorMsg(LOG_ERROR, &rsComm->rError, err_code,  "Function is not callable: %s ", strFunctionName );
+//		return err_code;
+//	}
 	// Call the python microservice with the parameters
-	cdmsLog( " Call function %s( '%s', '%s', '%s' ) ", strFunctionName, strDatasetPhysicalPath, strVarName, strRoi );
-	PyObject* pystrDatasetPhysicalPath = PyString_FromString( strDatasetPhysicalPath );
-	PyObject* pystrVarName = PyString_FromString( strVarName );
-	PyObject* pystrRoi = PyString_FromString( strRoi );
-	PyObject *arr = (PyObject*) PyObject_CallFunctionObjArgs( pFunc, pystrDatasetPhysicalPath, pystrVarName, pystrRoi );
-//	PyArrayObject *arr = (PyArrayObject*) PyObject_CallFunctionObjArgs( pFunc, pystrDatasetPhysicalPath, pystrVarName, pystrRoi );
+	cdmsLog( " Call function getVariable( '%s', '%s', '%s' ) ", strDatasetPhysicalPath, strVarName, strRoi );
+	PyArrayObject *arr = getVariable( strDatasetPhysicalPath, strVarName, strRoi );
 	cdmsLog( " Completed function call. " );
+
+
+//	PyObject* pystrDatasetPhysicalPath = PyString_FromString( strDatasetPhysicalPath );
+//	PyObject* pystrVarName = PyString_FromString( strVarName );
+//	PyObject* pystrRoi = PyString_FromString( strRoi );
+//	PyObject *arr = (PyObject*) PyObject_CallFunctionObjArgs( pFunc, pystrDatasetPhysicalPath, pystrVarName, pystrRoi );
+//	PyArrayObject *arr = (PyArrayObject*) PyObject_CallFunctionObjArgs( pFunc, pystrDatasetPhysicalPath, pystrVarName, pystrRoi );
 //	if ( arr == NULL ) {
 //		// if CallFunction fails rv is NULL. This is an error in the
 //		// python script (wrong name, syntax error, ...
@@ -349,6 +405,5 @@ int msiPythonFinalize(ruleExecInfo_t *rei) {
 //	PyRun_SimpleString("for f in imported_zip_packages:os.remove(f)");
 	return 0;
 }
-
 
 
