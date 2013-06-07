@@ -7,36 +7,6 @@
  */
 #include <Python.h>
 #include "arrayobject.h"
-#include "ncGetVarsByType.h"
-
-//	char desc.kind:  A ÔbÕ represents Boolean, a ÔiÕ represents signed integer, a ÔuÕ represents unsigned integer, ÔfÕ represents floating point,
-//  ÔcÕ represents complex floating point, ÔSÕ represents 8-bit character string, ÔUÕ represents 32-bit/character unicode string, and ÔVÕ repesents arbitrary.
-
-int setDataArrayType( ncGetVarOut_t *ncGetVarOut, char kind ) {
-	int type = NETCDF_INVALID_DATA_TYPE;
-	switch ( kind ) {
-	   case 'S':
-		   type = NC_CHAR;
-		   rstrcpy (ncGetVarOut->dataType_PI, "charDataArray_PI", NAME_LEN);
-		   break;
-	   case 'i':
-		   type = NC_INT;
-		   rstrcpy (ncGetVarOut->dataType_PI, "intDataArray_PI", NAME_LEN);
-		   break;
-	   case 'u':
-		   type = NC_UINT;
-		   rstrcpy (ncGetVarOut->dataType_PI, "intDataArray_PI", NAME_LEN);
-		   break;
-	   case 'f':
-		   type = NC_FLOAT;
-		   rstrcpy (ncGetVarOut->dataType_PI, "intDataArray_PI", NAME_LEN);
-		   break;
-	   default:
-		 rodsLog (LOG_ERROR, "msiGetCDMSVariable:setDataArrayType- Unknow dataType: '%c'", kind );
-	 }
-	 ncGetVarOut->dataArray->type = type;
-	return type;
-}
 
 char* getFilename(char* path) {
 	char str[strlen(path)];
@@ -87,7 +57,7 @@ void* getVariable( char* dataset_path, char* var_name, char* roi )
     char* script_path = "/Developer/Projects/iRODS/src-3.2/modules/cdms/python/CDMS_DataServices.py";
     char* method_name = "getCDMSVariable";
 
-    Py_Initialize();
+//    Py_Initialize();
 	PyRun_SimpleString("import sys");
 	sprintf( buffer, "sys.path.insert(0, '%s')", getBasename(script_path) );
 	PyRun_SimpleString(buffer);
@@ -126,7 +96,7 @@ void* getVariable( char* dataset_path, char* var_name, char* roi )
         PyErr_Print();
         fprintf(stderr, "Failed to load \"%s\"\n", script_path );
     }
-    Py_Finalize();
+//    Py_Finalize();
     return NULL;
 }
 
@@ -151,6 +121,94 @@ void pythonFinalize() {
 //	PyRun_SimpleString("import os");
 //	PyRun_SimpleString("for f in imported_zip_packages:os.remove(f)");
 }
+
+int getNDim( void* arr ) {
+	if ( !PyArray_Check( arr ) ) { fprintf(stderr,"PyArray type error in uvcdatWrappers:getNDim\n");  return 0; }
+	return (int) PyArray_NDIM( arr );
+}
+
+void* getRawData( void* arr ) {
+	if ( !PyArray_Check( arr ) ) { fprintf(stderr,"PyArray type error in uvcdatWrappers:getRawData\n");  return NULL; }
+	return PyArray_DATA( arr );
+}
+
+int getDims( void* arr, int* dims ) {
+	if ( !PyArray_Check( arr ) ) { fprintf(stderr,"PyArray type error in uvcdatWrappers:getDims\n");  return -1; }
+	npy_intp* np_dims = PyArray_DIMS( arr );
+	for( int i=0; i<getNDim( arr ); i++ ) {
+		dims[i] = (int)np_dims[i];
+	}
+	return 0;
+}
+
+int getSize1( void* arr ) {
+//	if ( !PyArray_Check( arr ) ) { fprintf(stderr,"PyArray type error in uvcdatWrappers:getSize\n");  return 0; }
+	if ( !PyArray_Check( arr ) ) { return -1; }
+	return (int) PyArray_Size( (PyObject *) arr );
+}
+
+int getSize( void* arr ) {
+	return (int) PyArray_Size( (PyObject *) arr );
+//	return (int) (((PyArrayObject *)(arr))->nd));
+}
+
+int getStrides( void* arr, int* strides ) {
+	if ( !PyArray_Check( arr ) ) { fprintf(stderr,"PyArray type error in uvcdatWrappers:getStrides\n");  return -1; }
+	npy_intp* np_dims = PyArray_STRIDES( arr );
+	for( int i=0; i<getNDim( arr ); i++ ) {
+		strides[i] = (int)np_dims[i];
+	}
+	return 0;
+}
+
+int getType( void* arr ) {
+	if ( !PyArray_Check( arr ) ) { fprintf(stderr,"PyArray type error in uvcdatWrappers:getType\n");  return -1; }
+	return (int) PyArray_TYPE( arr );
+}
+
+int isFloat( void* arr ) {
+	if ( !PyArray_Check( arr ) ) { fprintf(stderr,"PyArray type error in uvcdatWrappers:isFloat\n");  return 0; }
+	return (int) PyArray_ISFLOAT( arr );
+}
+
+int isInteger( void* arr ) {
+	if ( !PyArray_Check( arr ) ) { fprintf(stderr,"PyArray type error in uvcdatWrappers:isInteger\n");  return 0; }
+	return (int) PyArray_ISINTEGER( arr );
+}
+
+int isString( void* arr ) {
+	if ( !PyArray_Check( arr ) ) { fprintf(stderr,"PyArray type error in uvcdatWrappers:isString\n");  return 0; }
+	return (int) PyArray_ISSTRING( arr );
+}
+
+int isSigned( void* arr ) {
+	if ( !PyArray_Check( arr ) ) { fprintf(stderr,"PyArray type error in uvcdatWrappers:isSigned\n");  return 0; }
+	return (int) PyArray_ISSIGNED( arr );
+}
+
+const char* getTypeDesc( void* arr ) {
+	if ( !PyArray_Check( arr ) ) {
+		fprintf(stderr,"PyArray type error in uvcdatWrappers:getTypeDesc\n");
+	} else {
+		PyArray_Descr *desc = PyArray_DESCR( arr );
+		if( desc != NULL ) {
+			switch( desc->kind ) {
+				case 'b' : return " boolean";
+				case 'i' : return " signed integer";
+				case 'u' : return " unsigned integer";
+				case 'f' : return " floating point";
+				case 'c' : return " complex floating point";
+				case 'S' : return " 8-bit character string";
+				case 'U' : return " 32-bit/character unicode string.";
+				case 'V' : return " arbitrary.";
+			}
+		}
+	}
+	return "unknown.";
+}
+
+
+
 
 
 
