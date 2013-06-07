@@ -4,7 +4,6 @@
 { "msiGetCDMSVariable",		4,		(funcPtr) msiGetCDMSVariable  },
 { "msiPythonInitialize",	0,		(funcPtr) msiPythonInitialize  },
 { "msiPythonFinalize",		0,		(funcPtr) msiPythonFinalize  },
-{ "msiCDMSTest",		    1,		(funcPtr) msiCDMSTest  },
 
 
 

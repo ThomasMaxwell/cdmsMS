@@ -56,7 +56,7 @@ NUMPY_OBJECTS =
 #
 # Source files
 #
-MSOBJECT = $(MSObjDir)/cdmsMS.o
+MSOBJECT = $(MSObjDir)/cdmsMS.o $(MSObjDir)/uvcdatWrappers.o
 OBJECTS = $(MSOBJECT) $(NUMPY_OBJECTS)
 
 INCLUDE_FLAGS =	-I$(MSIncDir) $(PYTHON_INCLUDE) $(NUMPY_INCLUDE)
