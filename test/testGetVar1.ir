@@ -1,3 +1,3 @@
-test||msiPythonInitialize##msiGetCDMSVariable( *dsetPath, *varName, *roi, *result )##msiPythonFinalize|nop
-*dsetPath=/uvcdatZone/home/rods/comp-ECMWF/ecmwf.xml%*varName=Temperature%*roi=(lat=(-90,90))
-*result
+test||msiPythonInitialize##msiTransferCDMSVariable( *dsetPath, *varName, *roi, *svrResc, *physPath, *objPath )##msiPhyPathReg(*objPath,*svrResc,*physPath,null,*Status)##msiDataObjPhymv(*objPath,*clientResc,*svrResc,"0",null,*Status)##msiPythonFinalize|nop
+*dsetPath=/uvcdatZone/home/rods/comp-ECMWF/ecmwf.xml%*varName=Temperature%*roi=(lat=(-90,90))%*clientResc="clientResc"
+*objPath

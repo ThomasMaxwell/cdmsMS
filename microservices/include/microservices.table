@@ -1,10 +1,11 @@
 /* Properties module microservices */
 /* Service name			# args		Service function */
 
-{ "msiGetCDMSVariable",		4,		(funcPtr) msiGetCDMSVariable  },
-{ "msiPythonInitialize",	0,		(funcPtr) msiPythonInitialize  },
-{ "msiPythonFinalize",		0,		(funcPtr) msiPythonFinalize  },
-
+{ "msiGetCDMSVariable",		 4,		(funcPtr) msiGetCDMSVariable  },
+{ "msiTransferCDMSVariable", 6,		(funcPtr) msiTransferCDMSVariable  },
+{ "msiPythonInitialize",	 0,		(funcPtr) msiPythonInitialize  },
+{ "msiPythonFinalize",		 0,		(funcPtr) msiPythonFinalize  },
+{ "msiCdmsGetVara",			10,		(funcPtr) msiCdmsGetVara	},
 
 
 

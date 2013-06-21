@@ -4,4 +4,4 @@ cdmsGetVariable {
 	msiPythonFinalize();
 }
 INPUT *dsetPath="/uvcdatZone/home/rods/comp-ECMWF/ecmwf.xml", *varName="Temperature", *roi="(lat=(-90,90))"
-OUTPUT ruleExecOut
+OUTPUT *result

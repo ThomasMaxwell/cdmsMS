@@ -6,7 +6,9 @@
  ============================================================================
  */
 
-void* getVariable( char* dataset_path, char* var_name, char* roi );
+void* getVariable( char* userName, char* dataset_path, char* var_name, char* roi );
+
+char* transferVariable( char* userName, char* dataset_path, char* var_name, char* roi );
 
 void* getRawData( void* arr );
 
@@ -27,6 +29,10 @@ int isInteger( void* arr ) ;
 int isString( void* arr ) ;
 
 int isSigned( void* arr ) ;
+
+int getItemSize( void* arr ) ;
+
+int getNBytes( void* arr ) ;
 
 const char* getTypeDesc( void* arr );
 
